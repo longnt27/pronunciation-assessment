@@ -1,0 +1,132 @@
+{
+  "protocol": {
+    "workload": "interactive one utterance per request",
+    "ctc_service": "model resident; one warm-up excluded",
+    "mfa_service": "mfa align_one subprocess; installed models and PostgreSQL server reused",
+    "dataset": "tmp/datasets/speechocean762",
+    "selection": "first lexicographic test utterances successfully aligned by full MFA run",
+    "model": "mostafaashahin/wav2vec2-base-timit-phoneme-arpa-39",
+    "mfa_version": "3.4.2",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "torch": "2.14.0"
+  },
+  "metrics": {
+    "ctc_viterbi_ms": {
+      "count": 20,
+      "mean": 64.25935834995471,
+      "median": 64.8416039912263,
+      "p95": 82.538683344319
+    },
+    "mfa_align_one_ms": {
+      "count": 20,
+      "mean": 3962.4002895478043,
+      "median": 3636.9580004975433,
+      "p95": 4247.646487203024
+    },
+    "paired_mfa_over_ctc_ratio_median": 56.71643606546424
+  },
+  "rows": [
+    {
+      "utterance": "000030012",
+      "ctc_viterbi_ms": 62.662667012773454,
+      "mfa_align_one_ms": 9846.605041995645
+    },
+    {
+      "utterance": "000030024",
+      "ctc_viterbi_ms": 64.75124999997206,
+      "mfa_align_one_ms": 3952.9644580034073
+    },
+    {
+      "utterance": "000030040",
+      "ctc_viterbi_ms": 57.38958402071148,
+      "mfa_align_one_ms": 3572.346875007497
+    },
+    {
+      "utterance": "000030047",
+      "ctc_viterbi_ms": 64.93195798248053,
+      "mfa_align_one_ms": 3662.770041002659
+    },
+    {
+      "utterance": "000030049",
+      "ctc_viterbi_ms": 63.261959003284574,
+      "mfa_align_one_ms": 3624.0592499962077
+    },
+    {
+      "utterance": "000030051",
+      "ctc_viterbi_ms": 69.49308299226686,
+      "mfa_align_one_ms": 3622.2102500032634
+    },
+    {
+      "utterance": "000030054",
+      "ctc_viterbi_ms": 58.69025000720285,
+      "mfa_align_one_ms": 3619.5561249915045
+    },
+    {
+      "utterance": "000030059",
+      "ctc_viterbi_ms": 71.63620801293291,
+      "mfa_align_one_ms": 3651.6616250155494
+    },
+    {
+      "utterance": "000030069",
+      "ctc_viterbi_ms": 63.29787499271333,
+      "mfa_align_one_ms": 3609.467291011242
+    },
+    {
+      "utterance": "000030080",
+      "ctc_viterbi_ms": 67.13204100378789,
+      "mfa_align_one_ms": 3656.2534580007195
+    },
+    {
+      "utterance": "000030097",
+      "ctc_viterbi_ms": 52.63445898890495,
+      "mfa_align_one_ms": 3641.696334001608
+    },
+    {
+      "utterance": "000030101",
+      "ctc_viterbi_ms": 66.13987500895746,
+      "mfa_align_one_ms": 3656.3827079953626
+    },
+    {
+      "utterance": "000030116",
+      "ctc_viterbi_ms": 77.45441698352806,
+      "mfa_align_one_ms": 3728.2473749946803
+    },
+    {
+      "utterance": "000030119",
+      "ctc_viterbi_ms": 88.99741698405705,
+      "mfa_align_one_ms": 3670.9002499992494
+    },
+    {
+      "utterance": "000030145",
+      "ctc_viterbi_ms": 65.21166599122807,
+      "mfa_align_one_ms": 3651.401832990814
+    },
+    {
+      "utterance": "000030153",
+      "ctc_viterbi_ms": 48.8808749942109,
+      "mfa_align_one_ms": 3630.5541249748785
+    },
+    {
+      "utterance": "000030154",
+      "ctc_viterbi_ms": 65.50587501260452,
+      "mfa_align_one_ms": 3618.696541991085
+    },
+    {
+      "utterance": "000030175",
+      "ctc_viterbi_ms": 42.75824999785982,
+      "mfa_align_one_ms": 3569.234458002029
+    },
+    {
+      "utterance": "000240010",
+      "ctc_viterbi_ms": 52.158708014758304,
+      "mfa_align_one_ms": 3632.2196669934783
+    },
+    {
+      "utterance": "000240031",
+      "ctc_viterbi_ms": 82.1987499948591,
+      "mfa_align_one_ms": 3630.7780839852057
+    }
+  ],
+  "failures": []
+}

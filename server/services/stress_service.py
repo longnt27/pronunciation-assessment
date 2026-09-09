@@ -64,16 +64,16 @@ class StressEvaluator:
         e_x = np.exp(x - np.max(x))
         return e_x / np.sum(e_x)
 
-    def predict(self, audio_input, word_text: str, alignments: list or None = None, method: str = "soft_peaks") -> dict:
+    def predict(self, audio_input, word_text: str, alignments: list or None = None, method: str = "ctc_viterbi") -> dict:
         """
         Evaluates syllable stress for a word in an audio segment.
 
         Args:
             audio_input: bytes (WAV audio bytes) or np.ndarray (audio waveform)
             word_text: Word string (e.g. 'banana', 'record')
-            alignments: Optional alignment data (soft-peaks CTC or forced alignment)
-            method: 'soft_peaks' (default, alignment-free peak splitting),
-                    'aligned' (uses true MOP boundaries), or 'uniform' (baseline comparison)
+            alignments: Phone intervals from CTC-Viterbi or MFA
+            method: 'ctc_viterbi' (default, embedded CTC phone regions),
+                    'mfa' (external forced-alignment regions), or 'uniform'
 
         Returns:
             dict containing:

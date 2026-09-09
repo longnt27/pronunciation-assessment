@@ -201,13 +201,12 @@ def get_word_syllables(word: str, pronunciation: list or None = None, alignments
 
 def resolve_syllable_alignments(syllables: list, alignments: list or None, total_duration: float, y=None, sr: int = 16000) -> list:
     """
-    Maps alignment data (from forced alignment) to MOP syllables.
-    Eliminates naive uniform splitting by using true phoneme or syllable time bounds.
+    Maps phone or syllable interval data to MOP syllables.
 
     Supported alignment formats:
     1. List of phoneme dicts: [{'phoneme': 'B', 'start': 0.1, 'end': 0.2}, ...]
     2. List of syllable dicts: [{'start': 0.1, 'end': 0.4, 'nucleus_start': 0.2, 'nucleus_end': 0.35}, ...]
-    3. None: Uses energy/sonority peak detection to locate true acoustic syllables instead of naive uniform cuts.
+    3. None: Uses deterministic uniform regions as a compatibility fallback.
     """
     num_syls = len(syllables)
     if num_syls == 0:
@@ -215,8 +214,28 @@ def resolve_syllable_alignments(syllables: list, alignments: list or None, total
 
     resolved = []
 
+    # Zero-duration placeholders from a score-only method are not alignments.
+    # Treat them as absent so the acoustic fallback is used instead of feeding
+    # empty waveform slices to the stress model.
+    valid_alignments = []
+    if isinstance(alignments, list):
+        for alignment in alignments:
+            try:
+                start = float(alignment.get("start", 0.0))
+                end = float(alignment.get("end", 0.0))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if np.isfinite(start) and np.isfinite(end) and end > start:
+                valid_alignments.append(alignment)
+    alignments = valid_alignments
+
     # Case 1: Syllable-level alignments already provided
-    if alignments and isinstance(alignments, list) and len(alignments) == num_syls and "start" in alignments[0]:
+    if (
+        alignments
+        and len(alignments) == num_syls
+        and "start" in alignments[0]
+        and "phoneme" not in alignments[0]
+    ):
         for i, s in enumerate(syllables):
             ali = alignments[i]
             s_start = max(0.0, float(ali.get("start", 0.0)))
@@ -236,8 +255,8 @@ def resolve_syllable_alignments(syllables: list, alignments: list or None, total
             })
         return resolved
 
-    # Case 2: Phoneme-level alignments provided (e.g. from forced aligner / GOP)
-    if alignments and isinstance(alignments, list) and len(alignments) > 0 and "phoneme" in alignments[0]:
+    # Case 2: Phoneme-level intervals from embedded CTC-Viterbi or MFA
+    if alignments and "phoneme" in alignments[0]:
         flat_phonemes = []
         for s_idx, s in enumerate(syllables):
             for p in s['phonemes']:
@@ -273,35 +292,26 @@ def resolve_syllable_alignments(syllables: list, alignments: list or None, total
                 if nuc_match:
                     n_start = nuc_match["start"]
                     n_end = nuc_match["end"]
-                    n_peak = nuc_match.get("peak_time", None)
                 else:
                     n_start = s_start + (s_end - s_start) * 0.2
                     n_end = s_start + (s_end - s_start) * 0.8
-                    n_peak = None
             else:
                 # Fallback proportion
                 s_start = (i / num_syls) * total_duration
                 s_end = ((i + 1) / num_syls) * total_duration
                 n_start = s_start + (s_end - s_start) * 0.2
                 n_end = s_start + (s_end - s_start) * 0.8
-                n_peak = None
 
             resolved.append({
                 **s,
                 "start": max(0.0, float(s_start)),
                 "end": min(total_duration, float(s_end)),
                 "nucleus_start": max(0.0, float(n_start)),
-                "nucleus_end": min(total_duration, float(n_end)),
-                "nucleus_peak_time": n_peak
+                "nucleus_end": min(total_duration, float(n_end))
             })
         return resolved
 
-    # Case 3: No external alignment passed - use acoustic sonority/energy peak detection
-    if y is not None and len(y) > 0:
-        resolved = segment_by_acoustic_energy(y, sr, syllables)
-        return resolved
-
-    # Final fallback if no audio array passed
+    # Case 3: Compatibility fallback only; production supplies phone intervals.
     for i, s in enumerate(syllables):
         s_start = (i / num_syls) * total_duration
         s_end = ((i + 1) / num_syls) * total_duration
@@ -312,72 +322,6 @@ def resolve_syllable_alignments(syllables: list, alignments: list or None, total
             "nucleus_start": s_start + (s_end - s_start) * 0.2,
             "nucleus_end": s_start + (s_end - s_start) * 0.8
         })
-    return resolved
-
-
-def segment_by_acoustic_energy(y: np.ndarray, sr: int, syllables: list) -> list:
-    """
-    Acoustic-guided segmentation: Identifies vowel sonority/energy peaks and segments
-    at energy valleys between them, avoiding blind equal uniform splitting.
-    """
-    total_duration = len(y) / sr
-    num_syls = len(syllables)
-    if num_syls == 1:
-        return [{
-            **syllables[0],
-            "start": 0.0,
-            "end": total_duration,
-            "nucleus_start": total_duration * 0.2,
-            "nucleus_end": total_duration * 0.8
-        }]
-
-    # Compute smoothed RMS envelope
-    frame_length = int(sr * 0.025)
-    hop_length = int(sr * 0.010)
-    rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
-    times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop_length)
-
-    # Find speech boundaries (threshold at 10% of max energy)
-    thresh = 0.1 * np.max(rms) if np.max(rms) > 0 else 1e-4
-    active = np.where(rms > thresh)[0]
-    if len(active) > 0:
-        speech_start = times[active[0]]
-        speech_end = times[active[-1]]
-    else:
-        speech_start = 0.0
-        speech_end = total_duration
-
-    # Locate prominence valleys between syllables
-    seg_step = len(active) // num_syls if len(active) >= num_syls else 1
-    boundaries = [speech_start]
-
-    for k in range(1, num_syls):
-        nominal_center_idx = active[min(len(active)-1, k * seg_step)] if len(active) > 0 else int(len(rms) * k / num_syls)
-        search_radius = max(5, int(0.08 * sr / hop_length))
-        start_search = max(0, nominal_center_idx - search_radius)
-        end_search = min(len(rms), nominal_center_idx + search_radius)
-
-        min_idx = start_search + int(np.argmin(rms[start_search:end_search]))
-        boundary_time = times[min_idx]
-        boundary_time = max(boundaries[-1] + 0.05, min(speech_end - 0.05 * (num_syls - k), boundary_time))
-        boundaries.append(boundary_time)
-
-    boundaries.append(speech_end)
-
-    resolved = []
-    for i, s in enumerate(syllables):
-        s_start = boundaries[i]
-        s_end = boundaries[i + 1]
-        n_start = s_start + (s_end - s_start) * 0.25
-        n_end = s_start + (s_end - s_start) * 0.75
-        resolved.append({
-            **s,
-            "start": s_start,
-            "end": s_end,
-            "nucleus_start": n_start,
-            "nucleus_end": n_end
-        })
-
     return resolved
 
 
@@ -564,7 +508,7 @@ def extract_full_features(y: np.ndarray, sr: int, word: str, alignments: list or
         y: Normalized audio waveform array (1D float32)
         sr: Sample rate (usually 16000)
         word: Target word text (e.g. 'banana')
-        alignments: Optional forced alignment list (phoneme-level or syllable-level)
+        alignments: Optional CTC-Viterbi or MFA intervals
 
     Returns:
         tuple (features_38_tensor, syllables_metadata, debug_data)
@@ -620,7 +564,6 @@ def extract_full_features(y: np.ndarray, sr: int, word: str, alignments: list or
             "coda": s['coda'],
             "boundaries": {"start": float(round(s_start, 4)), "end": float(round(s_end, 4))},
             "nucleus_boundaries": {"start": float(round(n_start, 4)), "end": float(round(n_end, 4))},
-            "nucleus_peak_time": s.get("nucleus_peak_time"),
             "acoustic_features": ac_result["debug"],
             "is_stressed_truth": s['is_primary_stress'],
             "stress_marker": s['stress_marker']

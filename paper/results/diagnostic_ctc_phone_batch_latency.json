@@ -1,0 +1,56 @@
+{
+  "protocol": {
+    "dataset": "tmp/datasets/speechocean762",
+    "manifest": "tmp/mfa_speechocean_test_full.manifest.json",
+    "split": "test",
+    "utterances": 2500,
+    "model": "mostafaashahin/wav2vec2-base-timit-phoneme-arpa-39",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "torch": "2.14.0"
+  },
+  "metrics": {
+    "phones": 47369,
+    "raw_pcc": 0.3871364435545952,
+    "raw_srcc": 0.3312825489621782,
+    "wall_latency_ms": {
+      "count": 2500,
+      "mean": 69.07604759051465,
+      "median": 63.891166500980034,
+      "p95": 112.23544825770658
+    },
+    "stage_latency_ms": {
+      "preparation": {
+        "count": 2500,
+        "mean": 0.2057232,
+        "median": 0.199,
+        "p95": 0.2890499999999997
+      },
+      "ctc_encoding": {
+        "count": 2500,
+        "mean": 63.05672320000001,
+        "median": 58.6035,
+        "p95": 101.46089999999988
+      },
+      "ctc_viterbi": {
+        "count": 2500,
+        "mean": 4.3096632,
+        "median": 3.5955,
+        "p95": 9.581449999999997
+      },
+      "phone_scoring": {
+        "count": 2500,
+        "mean": 0.5978167999999999,
+        "median": 0.5674999999999999,
+        "p95": 0.9251499999999993
+      },
+      "total": {
+        "count": 2500,
+        "mean": 68.19301920000001,
+        "median": 62.912,
+        "p95": 111.10229999999994
+      }
+    }
+  },
+  "failures": []
+}

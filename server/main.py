@@ -84,11 +84,14 @@ async def health_check():
 async def assess_pronunciation(
     word: str = Form(..., description="Từ cần chấm điểm (vd: 'banana')"),
     audio: UploadFile = File(...),
-    method: str = Form("soft_peaks", description="Phương pháp: 'soft_peaks' (default), 'forced_align', hoặc 'alignment_free'")
+    method: str = Form(
+        "ctc_viterbi",
+        description="Embedded CTC-Viterbi alignment and phone LPP scoring",
+    ),
 ):
     """
     Endpoint All-in-One:
-    - Input: Audio + Word (+ optional method: 'soft_peaks', 'forced_align', 'alignment_free')
+    - Input: Audio + Word (+ optional method)
     - Output: Goodness of Pronunciation (Phoneme) + Syllable Stress Detection
     """
     if not stress_service or not gop_service:
@@ -104,7 +107,7 @@ async def assess_pronunciation(
         wav_buffer.seek(0)
         clean_audio_bytes = wav_buffer.read()
 
-        # 2. CHẠY GOP (Soft Alignment & CTC Peak Splitting hoặc Forced Alignment)
+        # 2. One CTC forward pass supplies both Viterbi phone regions and scores.
         gop_result = gop_service.infer_gop(clean_audio_bytes, word, method=method)
 
         if "error" in gop_result:
@@ -115,7 +118,7 @@ async def assess_pronunciation(
             clean_audio_bytes,
             word,
             alignments=gop_result.get("alignment"),
-            method=method
+            method=gop_result.get("timing_method", method),
         )
 
         if "error" in stress_result:
@@ -150,7 +153,13 @@ async def assess_pronunciation(
         return {
             "status": "success",
             "word": word,
-            "method": method,
+            "method": gop_result.get("method", method),
+            "scoring_method": gop_result.get("scoring_method", method),
+            "timing_method": gop_result.get("timing_method", method),
+            "external_aligner_used": gop_result.get("external_aligner_used", False),
+            "canonical_sequence_constrained": gop_result.get(
+                "canonical_sequence_constrained", True
+            ),
             "phones": phones_score,
             "stress": {
                 "truth": truth_stress,
@@ -162,7 +171,8 @@ async def assess_pronunciation(
             "details": {
                 "phoneme_details": gop_result.get("details", {}),
                 "syllable_details": stress_result.get("syllables", []),
-                "speech_bounds": gop_result.get("speech_bounds", {})
+                "speech_bounds": gop_result.get("speech_bounds", {}),
+                "latency_ms": gop_result.get("latency_ms", {}),
             }
         }
 

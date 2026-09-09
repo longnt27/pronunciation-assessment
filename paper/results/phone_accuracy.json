@@ -1,0 +1,70 @@
+{
+  "protocol": {
+    "dataset": "tmp/datasets/speechocean762",
+    "train_mfa_intervals": "tmp/mfa_output_train_full",
+    "test_mfa_intervals": "tmp/mfa_output_test_full",
+    "model": "mostafaashahin/wav2vec2-base-timit-phoneme-arpa-39",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "torch": "2.14.0",
+    "calibration": "per-phone quadratic; train only; global fallback below 20 samples",
+    "comparison": "paired phones; same CTC emissions and LPP; interval source only differs"
+  },
+  "counts": {
+    "train_utterances": 2462,
+    "test_utterances": 2447,
+    "train_phones": 43594,
+    "test_phones": 43613,
+    "failures": 0,
+    "elapsed_seconds": 365.7745620420028
+  },
+  "matching": {
+    "train": {
+      "canonical_phones": 46391,
+      "mfa_phones": 47001,
+      "matched_phones": 43594
+    },
+    "test": {
+      "canonical_phones": 46402,
+      "mfa_phones": 47042,
+      "matched_phones": 43613
+    }
+  },
+  "phone_accuracy": {
+    "ctc_viterbi": {
+      "raw": {
+        "pcc": 0.40122376155539213,
+        "srcc": 0.32512136293634775
+      },
+      "phone_quadratic": {
+        "pcc": 0.4589081212654197,
+        "srcc": 0.3760010977391637
+      }
+    },
+    "mfa": {
+      "raw": {
+        "pcc": 0.2157279535642712,
+        "srcc": 0.23341357283834044
+      },
+      "phone_quadratic": {
+        "pcc": 0.31680241350864696,
+        "srcc": 0.30162803322642434
+      }
+    }
+  },
+  "paired_inference": {
+    "metric": "ctc_viterbi_pcc_minus_mfa_pcc",
+    "mean": 0.14154877393584428,
+    "95_ci": [
+      0.11996025530104742,
+      0.16400149988459642
+    ],
+    "iterations": 2000
+  },
+  "mfa_boundary_disagreement_seconds": {
+    "mean": 0.1507033108415052,
+    "median": 0.049951690821255945,
+    "p95": 0.7162448305033536
+  },
+  "failures": []
+}

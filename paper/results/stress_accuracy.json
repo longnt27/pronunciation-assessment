@@ -1,0 +1,47 @@
+{
+  "protocol": {
+    "dataset": "tmp/datasets/speechocean762",
+    "split": "test",
+    "mfa_textgrids": "tmp/mfa_output_test_full",
+    "gop_model": "mostafaashahin/wav2vec2-base-timit-phoneme-arpa-39",
+    "stress_model": "server/models/sylstress/stress_model.keras",
+    "comparison": "paired words; same stress model/features; phone interval source only differs",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "torch": "2.14.0"
+  },
+  "counts": {
+    "aligned_utterances": 2447,
+    "paired_polysyllabic_words": 1621,
+    "human_correct_words": 1575,
+    "human_stress_error_words": 46,
+    "failures": 0,
+    "elapsed_seconds": 333.58624108400545
+  },
+  "stress_accuracy": {
+    "ctc_viterbi": {
+      "human_stress_grade_pcc": 0.15451266695097232,
+      "human_stress_grade_srcc": 0.14427605381580402,
+      "human_correct_stress_auroc": 0.7264389233954451,
+      "human_correct_stress_average_precision": 0.9855966445970603,
+      "canonical_location_accuracy_when_human_correct": 0.7485714285714286
+    },
+    "mfa": {
+      "human_stress_grade_pcc": 0.13313582735960153,
+      "human_stress_grade_srcc": 0.121907466729546,
+      "human_correct_stress_auroc": 0.6954175293305729,
+      "human_correct_stress_average_precision": 0.9835984118552793,
+      "canonical_location_accuracy_when_human_correct": 0.6946031746031746
+    }
+  },
+  "paired_location_accuracy_difference": {
+    "metric": "ctc_viterbi_minus_mfa",
+    "point": 0.053968253968254,
+    "95_ci": [
+      0.027666152404646146,
+      0.08017916427374498
+    ],
+    "iterations": 2000
+  },
+  "failures": []
+}

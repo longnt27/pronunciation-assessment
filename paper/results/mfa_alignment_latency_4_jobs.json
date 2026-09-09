@@ -1,0 +1,38 @@
+{
+  "mfa_version": "3.4.2",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "jobs": 4,
+  "execution_backend": "multiprocessing+postgres",
+  "corpus": "tmp/mfa_speechocean_test_full",
+  "input_utterances": 2500,
+  "aligned_utterances": 2447,
+  "audio_seconds": 9688.648000000003,
+  "wall_seconds": 69.98489975000848,
+  "wall_ms_per_input_utterance": 27.993959900003393,
+  "real_time_factor": 0.007223391720909714,
+  "return_code": 0,
+  "models": {
+    "dictionary": "english_us_arpa",
+    "acoustic": "english_us_arpa"
+  },
+  "command": [
+    "tmp/mfa-conda/bin/mfa",
+    "align",
+    "/Users/tlng/projects/pronunciation-assessment/tmp/mfa_speechocean_test_full",
+    "english_us_arpa",
+    "english_us_arpa",
+    "/Users/tlng/projects/pronunciation-assessment/tmp/mfa_output_test_full",
+    "--output_format",
+    "long_textgrid",
+    "--ignore_oovs",
+    "--num_jobs",
+    "4",
+    "--temporary_directory",
+    "/Users/tlng/projects/pronunciation-assessment/tmp/mfa_work_test_full",
+    "--clean",
+    "--overwrite",
+    "--use_postgres",
+    "--quiet"
+  ],
+  "log": "tmp/mfa_benchmark_test_full.log"
+}

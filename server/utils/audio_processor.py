@@ -1,5 +1,4 @@
 import librosa
-import soundfile as sf
 import noisereduce as nr
 import numpy as np
 
@@ -43,9 +42,5 @@ def preprocess_audio(y, sr=16000):
 
     # 4. NORMALIZE
     y_normalized = librosa.util.normalize(y_padded)
-
-    debug_filename = "debug_output.wav"
-    print(f"🔊 [DEBUG] Đang lưu file xử lý ra: {debug_filename}")
-    sf.write(debug_filename, y_normalized, sr)
 
     return y_normalized

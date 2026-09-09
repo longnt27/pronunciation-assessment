@@ -1,0 +1,102 @@
+{
+  "protocol": {
+    "workload": "complete paired phone-LPP and polysyllabic-stress assessment",
+    "conditions": {
+      "ctc_viterbi": "CTC encoding + Viterbi regions + phone LPP + stress",
+      "mfa": "one-job MFA alignment + CTC encoding + MFA-region phone LPP + stress"
+    },
+    "pairing": "same MFA-aligned utterances and fully matched polysyllabic words",
+    "condition_order": "alternated by utterance after one excluded warm-up",
+    "mfa_jobs": 1,
+    "dataset": "tmp/datasets/speechocean762",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "torch": "2.14.0",
+    "torch_intraop_threads": 4,
+    "torch_interop_threads": 10
+  },
+  "counts": {
+    "mfa_input_utterances": 2500,
+    "paired_complete_utterances": 2447,
+    "paired_phone_scores": 43613,
+    "paired_polysyllabic_stress_predictions": 1621,
+    "failures": []
+  },
+  "components": {
+    "mfa_external_alignment": {
+      "wall_seconds": 89.28482224998879,
+      "ms_per_input": 35.713928899995516
+    },
+    "ctc_viterbi": {
+      "encoding_ms": {
+        "count": 2447,
+        "mean": 62.86711974142884,
+        "median": 58.2647499977611,
+        "p95": 100.87637868709862,
+        "sum": 153835.84200727637
+      },
+      "phone_region_and_scoring_ms": {
+        "count": 2447,
+        "mean": 4.42409339184343,
+        "median": 3.660959016997367,
+        "p95": 9.806758916238323,
+        "sum": 10825.756529840874
+      },
+      "stress_ms": {
+        "count": 2447,
+        "mean": 31.263545502654097,
+        "median": 0.0009590003173798323,
+        "p95": 103.39420811505981,
+        "sum": 76501.89584499458
+      },
+      "downstream_total_ms": {
+        "count": 2447,
+        "mean": 98.55542546836088,
+        "median": 89.60291699622758,
+        "p95": 191.89619569224305,
+        "sum": 241165.12612107908
+      },
+      "scored_phones": 43613,
+      "scored_polysyllabic_words": 1621
+    },
+    "mfa": {
+      "encoding_ms": {
+        "count": 2447,
+        "mean": 62.75150564971949,
+        "median": 58.12070801039226,
+        "p95": 100.21360000828278,
+        "sum": 153552.9343248636
+      },
+      "phone_region_and_scoring_ms": {
+        "count": 2447,
+        "mean": 0.23527904674349925,
+        "median": 0.21800000104121864,
+        "p95": 0.39850381144788116,
+        "sum": 575.7278273813426
+      },
+      "stress_ms": {
+        "count": 2447,
+        "mean": 29.354845704828605,
+        "median": 0.0010420044418424368,
+        "p95": 95.28031230147461,
+        "sum": 71831.3074397156
+      },
+      "downstream_total_ms": {
+        "count": 2447,
+        "mean": 92.34223789946033,
+        "median": 85.47270900453441,
+        "p95": 176.0206625855062,
+        "sum": 225961.45613997942
+      },
+      "scored_phones": 43613,
+      "scored_polysyllabic_words": 1621
+    }
+  },
+  "complete_pipeline": {
+    "ctc_viterbi_wall_seconds": 241.16512612107908,
+    "mfa_wall_seconds": 315.2462783899682,
+    "ctc_viterbi_ms_per_paired_output": 98.55542546836088,
+    "mfa_ms_per_paired_output": 128.82970101755956,
+    "mfa_over_ctc_speed_ratio": 1.3071802024630046
+  }
+}
