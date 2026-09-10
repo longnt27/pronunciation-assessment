@@ -64,7 +64,14 @@ class StressEvaluator:
         e_x = np.exp(x - np.max(x))
         return e_x / np.sum(e_x)
 
-    def predict(self, audio_input, word_text: str, alignments: list or None = None, method: str = "ctc_viterbi") -> dict:
+    def predict(
+        self,
+        audio_input,
+        word_text: str,
+        alignments: list or None = None,
+        method: str = "ctc_viterbi",
+        neural_weight: float = 0.4,
+    ) -> dict:
         """
         Evaluates syllable stress for a word in an audio segment.
 
@@ -74,6 +81,9 @@ class StressEvaluator:
             alignments: Phone intervals from CTC-Viterbi or MFA
             method: 'ctc_viterbi' (default, embedded CTC phone regions),
                     'mfa' (external forced-alignment regions), or 'uniform'
+            neural_weight: Weight assigned to the neural model when it is
+                available. The deployed default is 0.4; use 1.0 to evaluate
+                the Mallela-inspired network without the prominence ensemble.
 
         Returns:
             dict containing:
@@ -145,11 +155,16 @@ class StressEvaluator:
         # Acoustic prominence sequential scoring (Yarra et al. 2019, Mallela et al. 2024)
         prom_scores = np.array([s.get("prominence_score", 0.0) for s in debug_data], dtype=np.float64)
 
-        if scores is not None:
+        if scores is not None and neural_weight >= 1.0:
+            scores = np.asarray(scores, dtype=np.float64)
+        elif scores is not None and neural_weight > 0.0:
             # Standardize both distributions before ensemble
             scores_norm = (scores - np.mean(scores)) / (np.std(scores) + 1e-6)
             prom_norm = (prom_scores - np.mean(prom_scores)) / (np.std(prom_scores) + 1e-6)
-            combined_scores = 0.4 * scores_norm + 0.6 * prom_norm
+            combined_scores = (
+                neural_weight * scores_norm
+                + (1.0 - neural_weight) * prom_norm
+            )
             scores = combined_scores
         else:
             scores = prom_scores

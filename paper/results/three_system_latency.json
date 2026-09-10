@@ -1,0 +1,67 @@
+{
+  "protocol": {
+    "latency_mode": "one request at a time; first request excluded",
+    "ctc_device": "cpu",
+    "pytorch_threads": 4,
+    "mfa_jobs": 1,
+    "mfa_denominator": "all requested corpus inputs, including failures",
+    "stress_timing": "all paired test requests; zero for requests without a scored polysyllable",
+    "third_system": "controlled GOPT adaptation; not official Kaldi front-end timing"
+  },
+  "counts": {
+    "front_end_latency_samples": 100,
+    "paired_test_requests_for_stress": 2447
+  },
+  "stage_latency_ms": {
+    "ctc_encoding": {
+      "mean": 154.85400121018756,
+      "median": 147.73302049434278,
+      "p95": 223.56484377087324
+    },
+    "cao_af_vectors": {
+      "mean": 8.634002480248455,
+      "median": 5.613229499431327,
+      "p95": 19.953758637711854
+    },
+    "ctc_viterbi": {
+      "mean": 2.9799583184649237,
+      "median": 2.722000004723668,
+      "p95": 5.538403839454986
+    },
+    "mfa_vectors": {
+      "mean": 1.5197654301300645,
+      "median": 1.431020995369181,
+      "p95": 2.4589562584878872
+    },
+    "mfa_phone_gopt": {
+      "mean": 0.3873654190101661,
+      "median": 0.3820830024778843,
+      "p95": 0.44308959622867405
+    },
+    "cao_phone_gopt": {
+      "mean": 0.31631377118173987,
+      "median": 0.3186670073773712,
+      "p95": 0.34488750679884106
+    },
+    "gopt_joint_head": {
+      "mean": 0.4160933993989602,
+      "median": 0.41706250340212137,
+      "p95": 0.4554746803478338
+    }
+  },
+  "stress_latency_ms_per_request": {
+    "ctc_viterbi_stress_latency_ms": 45.78677843911246,
+    "mfa_stress_latency_ms": 42.15095754734038
+  },
+  "external_mfa_alignment_ms_per_requested_input": 35.713928899995516,
+  "complete_pipeline_mean_ms_per_request": {
+    "mfa_modular": 234.62601850666368,
+    "cao_viterbi_proposed": 212.57105421919513,
+    "gopt_joint": 192.5037889397121
+  },
+  "speedup_vs_mfa_modular": {
+    "mfa_modular": 1.0,
+    "cao_viterbi_proposed": 1.1037533749290547,
+    "gopt_joint": 1.2188124701282805
+  }
+}

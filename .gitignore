@@ -5,3 +5,10 @@ server/pronunciation_assessment.egg-info
 .ipynb_checkpoints/
 *.wav
 test_samples/
+tmp/
+output/pdf/*.aux
+output/pdf/*.bbl
+output/pdf/*.blg
+output/pdf/*.log
+paper/results/three_system_run_*.json
+paper/results/three_system_run_*.predictions.npz

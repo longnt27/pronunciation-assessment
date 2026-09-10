@@ -6,10 +6,11 @@
 \usepackage{microtype}
 \usepackage{url}
 \usepackage{cite}
+\usepackage{balance}
 
 \begin{document}
 
-\title{One Trellis, Two Assessments: An Embedded CTC--Viterbi Alternative to MFA for Phoneme and Lexical-Stress Scoring}
+\title{Align Only Where Needed: Alignment-Free Phoneme Scoring and Embedded CTC--Viterbi Stress Assessment}
 
 \author{\IEEEauthorblockN{Long, Nguyen Trung}
 \IEEEauthorblockA{\texttt{long.nt270504@gmail.com}}}
@@ -17,348 +18,403 @@
 \maketitle
 
 \begin{abstract}
-Pronunciation-assessment systems often run an external forced aligner before
-computing phoneme goodness and syllable-stress features. We investigate whether
-one resident phoneme Connectionist Temporal Classification (CTC) model can do
-both jobs. Our system decodes the maximum-probability path through a canonical
-phone-conditioned CTC trellis, uses phone-state frames for mean log-posterior
-scores, and converts the same path into continuous regions for a fixed
-Mallela-inspired sequential stress scorer. Montreal Forced Aligner (MFA) 3.4.2
-is the external-alignment baseline. In a controlled SpeechOcean762 experiment,
-the CTC and MFA conditions share the acoustic posteriors, targets, score,
-calibration, and stress model; only phone-region estimation differs. On 43,613
-paired test phones, CTC--Viterbi obtains calibrated Pearson correlation 0.459
-versus 0.317 for MFA. The paired difference is 0.142 (95\% speaker-bootstrap
-confidence interval 0.120--0.164). On 1,575 polysyllabic words whose human
-stress grade is correct, canonical stress-location accuracy is 74.9\% versus
-69.5\%, a 5.4-point difference (95\% interval 2.8--8.0). A complete paired
-batch---one CTC encoding, 43,613 phone scores, and 1,621 polysyllabic stress
-predictions per condition---takes 98.6 ms per utterance with CTC--Viterbi and
-128.8 ms with a one-job MFA baseline, a 1.31$\times$ speed ratio. The results
-support an MFA-free architecture without an observed accuracy trade-off under
-this protocol.
+Phoneme scoring does not necessarily require phone boundaries, whereas
+syllable-stress features do require temporal localization. We therefore
+combine Cao et al.'s alignment-free Connectionist Temporal Classification
+(CTC) vector features and a phone-only GOPT model with an embedded,
+transcript-conditioned CTC--Viterbi path used only by a Mallela-inspired
+sequential stress scorer. We compare this proposal on the official
+speaker-disjoint SpeechOcean762 split with (i) a modular Montreal Forced
+Aligner (MFA) pipeline and (ii) Gong et al.'s joint multi-task GOPT
+architecture, adapted to the same CTC front end. Across five independent
+seeds and 46,119 common test phones, the proposed phone branch obtains Pearson
+correlation $0.645\mathbin{\pm}0.009$, versus $0.413\mathbin{\pm}0.013$ for
+the MFA modular baseline and $0.418\mathbin{\pm}0.005$ for joint GOPT. On
+2,354 common polysyllabic words, CTC--Viterbi and MFA yield stress-correctness
+AUROC 0.681 and 0.662. Their canonical stress-location accuracies are 85.14\%
+and 85.85\%; the paired difference is $-0.70$ percentage points (95\%
+speaker-bootstrap interval $[-1.81,0.48]$), so no stress difference is
+statistically resolved. Complete single-request CPU latency is 212.6 ms for
+the proposal, 234.6 ms for modular MFA, and 192.5 ms for joint GOPT. Thus the
+hybrid design is 1.10$\times$ faster than the like-for-like modular MFA
+pipeline and substantially improves phone correlation, while the joint model
+exposes a different speed--accuracy trade-off. We release reproducible feature,
+training, paired-stress, latency, and official-checkpoint validation code.
 \end{abstract}
 
 \begin{IEEEkeywords}
-pronunciation assessment, goodness of pronunciation, CTC, Viterbi decoding,
-lexical stress, forced alignment
+pronunciation assessment, goodness of pronunciation, CTC, GOPT, lexical
+stress, forced alignment
 \end{IEEEkeywords}
 
 \section{Introduction}
 
-Computer-assisted pronunciation training benefits from both segmental
-feedback---which phone was weak---and suprasegmental feedback---which syllable
-received lexical stress. Classical goodness-of-pronunciation (GOP) systems
-first align a known transcript and then aggregate acoustic-model evidence
-inside each phone interval~\cite{witt2000phone,hu2015improved}. Stress systems
-likewise require temporal regions because duration, intensity, pitch, and
-sonority are properties of a syllable or its nucleus rather than a complete
-utterance~\cite{fry1958experiments,yarra2019comparison}.
+Computer-assisted pronunciation training benefits from segmental feedback
+about individual phones and suprasegmental feedback about lexical stress.
+Traditional goodness-of-pronunciation (GOP) pipelines first align a known
+transcript, then aggregate acoustic evidence within each phone interval
+\cite{witt2000phone,hu2015improved}. Stress systems likewise use syllable or
+vowel regions to measure duration, intensity, fundamental frequency, and
+spectral prominence \cite{fry1958experiments,yarra2019comparison}. This often
+leads a complete assessment service to run an external forced aligner even when
+only one branch truly needs boundaries.
 
-Montreal Forced Aligner (MFA) provides reliable, general-purpose word and phone
-intervals through a Kaldi-based alignment pipeline~\cite{mcauliffe2017montreal,
-povey2011kaldi}. It also introduces a second acoustic model, a pronunciation
-dictionary, a database, subprocess orchestration, and a handoff of alignment
-artifacts. Those costs are reasonable for corpus preparation but unattractive
-for an interactive tutor already running a phoneme CTC model.
+Cao et al. recently showed that CTC permits phone-level pronunciation features
+without selecting a frame path \cite{cao2024framework}. Their
+alignment-free vector marginalizes over every CTC path for the canonical
+sequence and locally modified alternatives. Conversely, the sequential stress
+models of Mallela et al. operate on syllable features, so they still need
+localized acoustic evidence \cite{mallela2024comparative}. Our design follows
+both observations: do not align for the phone score, but derive stress regions
+from a Viterbi path already available in the resident CTC posterior matrix.
 
-This work asks whether the resident CTC model can supply the necessary phone
-regions itself. CTC was designed to train sequence models without frame-level
-labels by marginalizing paths that collapse to an output sequence
-~\cite{graves2006connectionist}. At inference, the same topology supports a
-maximum-probability path constrained by the expected phone sequence. We call
-this operation \emph{embedded CTC--Viterbi alignment}. It is not unconstrained
-phone recognition: the canonical phones define the trellis. The architectural
-claim is narrower and operational: no external MFA/Kaldi alignment job is used
-by an assessment request.
+The complete proposal has no MFA/Kaldi request-time dependency. Its Viterbi
+trellis is nevertheless conditioned on the canonical phone sequence; we call
+it \emph{embedded localization}, not unconstrained recognition. The relevant
+engineering distinction is that the same CTC inference supplies both Cao
+features and stress regions, without a second acoustic model, dictionary
+pipeline, database, or alignment subprocess.
 
-Figure~\ref{fig:architecture} contrasts the two pipelines. Our contributions
-are:
-\begin{itemize}
-    \item a tested CTC--Viterbi decoder whose phone regions drive both phoneme
-    scoring and lexical-stress features;
-    \item a paired experiment that holds all downstream scoring components
-    fixed while replacing only CTC regions with MFA regions;
-    \item a matched complete-pipeline latency experiment that charges each
-    condition for phone scoring and lexical-stress inference; and
-    \item checked-in phone- and word-level outputs, failure records, environment
-    metadata, and speaker-bootstrap inference.
-\end{itemize}
+We evaluate three complete systems (Fig.~\ref{fig:architecture}):
+\begin{enumerate}
+    \item a strong modular MFA baseline with an MFA-aligned CTC vector phone
+    scorer and an MFA-conditioned sequential stress scorer;
+    \item the proposed Cao alignment-free phone scorer plus the same stress
+    scorer using embedded CTC--Viterbi intervals; and
+    \item Gong et al.'s published multi-aspect, multi-granularity GOPT
+    architecture \cite{gong2022gopt}, adapted to emit both phone and word
+    stress scores from the controlled MFA-aligned CTC input.
+\end{enumerate}
+The study reports a common held-out subset, five initialization seeds, a paired
+speaker bootstrap for the fixed stress branches, and one-request latency with
+equal thread/job settings. We also run the unmodified official GOPT checkpoint
+on its released tensors to verify our interpretation of that architecture.
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.98\textwidth]{fig_architecture.png}
-    \caption{The proposed path obtains phone scores and stress regions from one
-    resident CTC model. The baseline first runs external MFA, then passes its
-    intervals to the same CTC score and stress modules.}
+    \includegraphics[width=0.98\textwidth]{fig_architecture_three.png}
+    \caption{The three controlled complete systems. The proposal uses Cao's
+    path-marginalized features for phone scoring and computes a single
+    transcript-conditioned Viterbi path only for syllable stress.}
     \label{fig:architecture}
 \end{figure*}
 
 \section{Related Work}
 
-Witt and Young introduced phone-level pronunciation confidence for language
-learning~\cite{witt2000phone}; later DNN-GOP formulations replaced generative
-likelihoods with neural posteriors~\cite{hu2015improved}. SpeechOcean762's
-released Kaldi recipe constructs an alignment graph directly from the
-expert-selected canonical phone sequence and fits phone-specific regressors
-~\cite{zhang2021speechocean762}. Cao et al. show that CTC also supports
-alignment-marginalized scalar and vector GOP definitions~\cite{cao2024framework}.
-Our objective differs: we deliberately recover a single CTC path because both
-phone scoring and stress feature extraction require localized evidence, while
-eliminating a separate aligner service.
+Witt and Young introduced phone-level pronunciation confidence for interactive
+language learning \cite{witt2000phone}; later DNN-GOP methods replaced
+generative likelihoods with neural posteriors \cite{hu2015improved}.
+SpeechOcean762 supplies a reproducible, expert-rated non-native English
+benchmark and a Kaldi recipe \cite{zhang2021speechocean762}. MFA packages a
+Kaldi-based text--speech alignment workflow for broader use
+\cite{mcauliffe2017montreal,povey2011kaldi}.
 
-Lexical stress is conveyed by relative duration, intensity, and fundamental
-frequency~\cite{fry1958experiments}. Yarra et al. demonstrate that automatic
-boundary quality affects stress detection and examine forced-alignment acoustic
-models and lexicons on ISLE~\cite{yarra2019comparison}. Mallela et al. treat a
-word as a sequence of syllable features, use masking for variable-length words,
-and compare RNN, LSTM, GRU, and attention models on German and Italian learners
-in ISLE~\cite{mallela2024comparative}. Their pipeline obtains phone alignments
-automatically, manually corrects them, derives syllables, and applies a
-word-level post-processing rule that selects one primary stress. We reuse the
-sequential and word-constraint ideas, but our local checkpoint and feature code
-are an adaptation rather than a reproduction of their ISLE model.
+Cao et al. formulate scalar and vector CTC-GOP features in alignment-based and
+alignment-free forms \cite{cao2024framework}. Their strongest vector features
+can be consumed by GOPT, a compact Transformer that combines acoustic GOP
+features, canonical phone embeddings, learned position embeddings, and
+phone-, word-, and utterance-level supervision \cite{gong2022gopt}. The
+original GOPT input is an 84-dimensional Kaldi GOP vector. We retain its model
+topology but use controlled CTC-derived vectors so the three systems share one
+posterior source.
 
-\section{Method}
+Lexical stress depends on relative syllabic cues rather than one absolute
+measurement \cite{fry1958experiments}. Yarra et al. examine boundary sources
+and contextual features for automatic stress detection
+\cite{yarra2019comparison}. Mallela et al. model a word as a variable-length
+sequence of syllables with recurrent networks and a post-processing constraint
+that selects one primary stress \cite{mallela2024comparative}. Our local
+stress checkpoint follows those architectural ideas. It is an adaptation, not
+their unreleased ISLE checkpoint or an exact reproduction of their corpus
+experiment.
 
-\subsection{Embedded CTC--Viterbi path}
+\section{Three Assessment Systems}
 
-Let $\mathbf{L}=(l_1,\ldots,l_U)$ be the expected phone sequence and let
-$\ell_{t,k}=\log p(k\mid\mathbf{x},t)$ be the log posterior for token $k$ at
-CTC frame $t$. We form the expanded state sequence
+\subsection{Shared CTC posterior matrix}
+
+All systems use the Wav2Vec~2.0 XLSR-53 large phone recognizer released by Cao
+et al., fine-tuned on LibriSpeech train-clean-100. It emits log posteriors
+$\ell_{t,k}=\log p(k\mid\mathbf{x},t)$ for 39 ARPAbet phones plus CTC blank.
+This common encoding is charged once to every complete pipeline. The
+experimental branches differ after this matrix.
+
+\subsection{Proposed alignment-free phone branch}
+
+Let $\mathbf{y}=(y_1,\ldots,y_U)$ be the canonical phone sequence and
 \begin{equation}
-\mathbf{z}=(\phi,l_1,\phi,l_2,\ldots,\phi,l_U,\phi),
+G(\mathbf{y})=-\log\sum_{\boldsymbol{\pi}:B(\boldsymbol{\pi})=\mathbf{y}}
+\exp\sum_t \ell_{t,\pi_t}
 \end{equation}
-where $\phi$ is blank. The Viterbi recurrence is
+be its CTC negative log likelihood, where $B$ removes blanks and repeated
+labels. For each canonical position $u$, Cao's vector concatenates
+$G(\mathbf{y})$ with 40 local contrasts
 \begin{equation}
-V_t(s)=\ell_{t,z_s}+\max_{r\in\mathcal{P}(s)}V_{t-1}(r),
-\label{eq:viterbi}
+r_{u,a}=G(\mathbf{y}_{u\leftarrow a})-G(\mathbf{y}),
 \end{equation}
-where $\mathcal{P}(s)$ permits staying at $s$, advancing from $s-1$, and
-advancing from $s-2$ into a phone state only when the skipped and current
-phone labels differ. The last restriction forces repeated adjacent phones to
-pass through blank. Initialization permits the leading blank or first phone;
-termination permits the last phone or trailing blank. Backtracking yields one
-state per frame in $\mathcal{O}(TU)$ time and $\mathcal{O}(TU)$ memory.
+covering deletion and all 39 phone substitutions. The result is a 41-D vector
+per phone and sums over all legal CTC paths; it contains no boundary estimate.
+We implement the official ordering and verify its loss values against
+exhaustive path enumeration on small lattices.
 
-The implementation is verified against exhaustive enumeration of every valid
-path in small lattices. It also includes a dedicated repeated-phone test.
+These vectors enter a phone-only GOPT: a linear feature projection, a 40-way
+canonical-phone projection, learned positions, five learned class tokens,
+three 24-dimensional one-head Transformer blocks, and a phone regression head.
+The class tokens preserve the official topology even though auxiliary losses
+are absent.
 
-\subsection{Phone regions and score}
+\subsection{Embedded CTC--Viterbi stress branch}
 
-Let $F_i=\{t:z_{s_t}=l_i\}$ be the frames assigned to phone $i$. Its scalar
-score is the frame-averaged log posterior
+Stress features require regions. We expand the canonical sequence into
 \begin{equation}
-g_i=\frac{1}{|F_i|}\sum_{t\in F_i}\ell_{t,l_i}.
-\label{eq:lpp}
+\mathbf{z}=(\phi,y_1,\phi,y_2,\ldots,\phi,y_U,\phi)
 \end{equation}
-For a continuous interval, the start and end of the phone-state run are
-extended across adjacent blank gaps by midpoint splitting. Equation
-~\ref{eq:lpp} uses only phone-state frames, whereas the expanded intervals are
-passed to the stress branch.
+and decode
+\begin{equation}
+V_t(s)=\ell_{t,z_s}+\max_{r\in\mathcal{P}(s)}V_{t-1}(r).
+\end{equation}
+The predecessor set permits a self-loop, one-state advance, and a two-state
+skip into a phone only when adjacent labels differ. Repeated phones must pass
+through blank. Backtracking provides one contiguous region per canonical phone
+in $\mathcal{O}(TU)$ time. The implementation has explicit repeated-phone and
+small-lattice tests.
 
-For the MFA baseline, MFA supplies phone intervals. Frame centers falling
-inside an MFA interval replace $F_i$ in Eq.~\ref{eq:lpp}; a nearest-frame rule
-handles an interval shorter than one CTC frame. A global edit-distance match
-pairs identical phones between the expert canonical sequence and the MFA
-output. Only phones matched in both conditions enter the comparison.
+Maximal-onset syllabification groups the phone regions, and the vowel interval
+defines the nucleus. The local 42,061-parameter scorer consumes 38 features per
+syllable (19 acoustic and 19 contextual), uses masked LSTM layers of 64, 32,
+and 16 units, a four-dimensional attention layer, sigmoid scores, and a
+word-level argmax. The comparison uses only this neural output
+(\texttt{neural\_weight=1.0}); the deployed acoustic-prominence ensemble is
+disabled.
 
-\subsection{Stress scoring}
+\subsection{MFA modular baseline}
 
-Canonical pronunciations are syllabified by the maximal-onset principle. Phone
-regions are grouped by syllable and the vowel-phone interval defines the
-nucleus. The local feature extractor emits 19 acoustic measurements covering
-duration, pitch, intensity, and spectral properties and 19 context features.
-The fixed scorer contains three LSTM layers (64, 32, and 16 units), a
-four-unit attention projection, and a sigmoid output. Its standardized neural
-scores are combined with a relative acoustic-prominence score; word-level
-argmax selects exactly one primary-stress location. This same scorer, scaler,
-audio, pronunciation, and post-processing are used for CTC and MFA intervals.
+MFA 3.4.2 supplies word and phone intervals. For each phone interval we
+average the 39 non-blank CTC log posteriors and concatenate 39 target-relative
+log-posterior differences, yielding a 78-D aligned vector. A phone-only GOPT of
+the same topology as above predicts the phone grade. The same fixed 38-D
+stress feature code and sequential checkpoint use MFA rather than Viterbi
+regions. Thus MFA is charged for one alignment, one CTC encoding, a phone head,
+and the complete stress branch.
+
+MFA phone sequences are globally matched to expert canonical sequences with
+Levenshtein dynamic programming. Every diagonal match is retained, including
+substitutions; an MFA interval is then labeled with the corresponding expert
+canonical phone. Insertions and deletions alone are excluded. This avoids
+artificially removing pronunciation errors merely because MFA chose a
+different phone symbol.
+
+\subsection{Joint GOPT comparator}
+
+The third system uses the same MFA-aligned 78-D vectors but retains GOPT's
+multi-task heads: phone accuracy; word accuracy, stress, and total; and five
+utterance dimensions. It therefore produces both requested scores with one
+model and no separate stress feature network. This is a controlled adaptation
+of the published architecture, not the unchanged official Kaldi-front-end
+pipeline. We validate the latter separately in Sec.~\ref{sec:official}.
 
 \section{Experimental Design}
 
-\subsection{Corpus and models}
+\subsection{Corpus, coverage, and training}
 
 SpeechOcean762 contains 5,000 English utterances from 250 Mandarin-speaking
-learners, divided into speaker-disjoint sets of 2,500 utterances from 125
-speakers each~\cite{zhang2021speechocean762}. Five experts supply phone
-accuracy scores from 0 to 2 and word stress scores: 10 for correct stress (or a
-monosyllable) and 5 for incorrect stress. We retain the official split.
+learners, split into speaker-disjoint train and test partitions of 2,500
+utterances and 125 speakers each \cite{zhang2021speechocean762}. Five experts
+provide phone accuracy grades from 0 to 2. Word stress is 10 when accepted and
+5 when incorrect. We use the official split.
 
-The resident model is
-\texttt{mostafaashahin/wav2vec2-base-timit-phoneme-arpa-39}, a Wav2Vec~2.0
-base CTC phone model~\cite{baevski2020wav2vec}. MFA 3.4.2 uses its
-\texttt{english\_us\_arpa} dictionary and acoustic model. With
-\texttt{--ignore\_oovs}, MFA exports 2,462 training and 2,447 test TextGrids.
-The paired phone sets contain 43,594 training and 43,613 test phones. The CTC
-system itself scores all 2,500 test utterances; restriction is required only
-for the paired baseline comparison.
+Cao features are available for 47,076 training and 47,369 test phones. MFA
+exports 2,462 training and 2,447 test TextGrids with
+\texttt{--ignore\_oovs}; diagonal mapping retains 46,064 and 46,119 phones,
+respectively. All three phone systems are evaluated on the same 46,119 test
+phones. The alignment-free model uses every available training phone, while
+the MFA-dependent systems use 46,064. This 2.2\% coverage advantage is part of
+the complete system comparison and a possible contributor to accuracy.
 
-\subsection{Phone endpoint}
+Feature families are normalized with one scalar mean and standard deviation
+estimated only on their training examples. Models train for 100 epochs with
+Adam ($10^{-3}$, $\beta_1=0.95$, $\beta_2=0.999$, weight decay
+$5\times10^{-7}$), the released warm-up/multi-step schedule, and batch size
+25. We report mean and sample standard deviation over five deterministic,
+independent initializations; predictions are not ensembled.
 
-For each condition, phone-specific quadratic regressors map Eq.~\ref{eq:lpp}
-to the human grade. Regressors are fitted only on the matched official training
-phones; a global quadratic is used if a phone has fewer than 20 examples.
-Predictions are clipped to $[0,2]$. We report Pearson correlation (PCC) and
-Spearman correlation (SRCC) on the paired test phones. To preserve dependence
-within a speaker, the central PCC difference is evaluated with 2,000 paired
-speaker bootstrap samples.
+\subsection{Endpoints and inference}
 
-\subsection{Stress endpoints}
+Phone endpoints are Pearson (PCC), Spearman (SRCC), and mean-squared error
+(MSE) against expert phone grades. Run-matched PCC differences summarize model
+initialization variation.
 
-The stress comparison includes polysyllabic words whose complete phone sequence
-is matched to MFA, yielding 1,621 words: 1,575 rated correct and 46 rated as
-stress errors. The primary boundary-sensitivity endpoint is canonical
-stress-location accuracy among human-correct words; here the expert label
-establishes that the realized stress should agree with the dictionary location.
-We bootstrap its paired CTC-minus-MFA difference by speaker 2,000 times. As a
-secondary endpoint, the predicted probability assigned to the canonical
-primary syllable is used to distinguish human-correct from human-incorrect
-stress, reported as area under the ROC curve (AUROC). SpeechOcean does not
-annotate the realized destination of a misplaced stress, so wrong-location
-accuracy cannot be measured for the 46 errors.
+The stress set contains 2,354 common polysyllabic words from 1,578 utterances
+and all 125 test speakers: 2,282 accepted-stress tokens and 72 stress errors.
+Every system is evaluated on this same set. The primary common endpoint is area
+under the receiver operating characteristic curve (AUROC) for accepted versus
+incorrect stress. We additionally report PCC with the binary stress grade. For
+the two sequential branches, canonical-location accuracy is meaningful among
+words rated correct: when expert stress is accepted, a successful detector
+should select the dictionary-primary syllable. GOPT emits a scalar word-stress
+grade and does not produce a location.
 
-\subsection{Latency protocols}
+For the two fixed sequential conditions, we resample speakers with replacement
+10,000 times and recompute paired Viterbi-minus-MFA differences in AUROC and
+location accuracy. These are uncertainty intervals, not a preregistered
+non-inferiority test.
 
-All timings use the same ARM64 macOS CPU and a complete paired batch workload.
-For each of the 2,447 MFA-aligned test utterances, both conditions execute one
-resident CTC encoding, score the same matched phone tokens, and run the same
-stress model on every fully matched polysyllabic word. The proposed condition
-additionally runs the CTC--Viterbi trellis; the baseline uses an MFA TextGrid.
-Condition order alternates by utterance after one excluded warm-up to reduce
-systematic order and thermal effects. Each condition uses one top-level Python
-assessment process and the same four PyTorch intra-operation CPU threads.
+\subsection{Equal-resource latency}
 
-The baseline is also charged for a fresh MFA 3.4.2 corpus alignment with
-\texttt{--num\_jobs 1}. This stage processes all 2,500 inputs, including the 53
-cases for which no TextGrid is exported, and takes 89.3 s. Complete serial wall
-time is the measured MFA alignment time plus measured downstream assessment
-time. We divide each condition's total by the 2,447 paired outputs. This design
-tests the deployed assessment workload rather than alignment-only throughput.
+Latency is measured on the same ARM64 macOS CPU, one request at a time. Every
+system uses four PyTorch intra-operation threads; MFA uses exactly one job.
+One CTC warm-up request is excluded. We record 100 complete front-end requests.
+Stress time is measured over the paired set and amortized over all 2,447
+MFA-aligned test requests, assigning zero to requests without a scored
+polysyllable. A fresh one-job MFA corpus run takes 35.71 ms per requested
+input, including failures. No multi-worker alignment-only timing enters the
+complete comparison.
 
 \section{Results}
 
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.98\textwidth]{fig_three_systems.png}
+    \caption{Held-out phone PCC, stress-correctness AUROC, and complete
+    single-request latency. Phone and joint-GOPT stress error bars are sample
+    standard deviations across five seeds; the fixed stress bars have no
+    initialization variance.}
+    \label{fig:results}
+\end{figure*}
+
 \begin{table}[t]
 \centering
-\caption{Paired phone assessment on 43,613 held-out phones.}
+\caption{Phone accuracy on 46,119 common test phones. Learned-model values are
+mean $\pm$ sample standard deviation over five seeds.}
 \label{tab:phone}
-\begin{tabular}{lrr}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
-Metric & CTC--Viterbi & MFA \\
+Metric & MFA & Proposed & Joint GOPT \\
 \midrule
-Raw PCC & 0.401 & 0.216 \\
-Raw SRCC & 0.325 & 0.233 \\
-Quadratic PCC & \textbf{0.459} & 0.317 \\
-Quadratic SRCC & \textbf{0.376} & 0.302 \\
+PCC  & $0.413\pm.013$ & $\mathbf{0.645\pm.009}$ & $0.418\pm.005$ \\
+SRCC & $0.381\pm.004$ & $\mathbf{0.432\pm.003}$ & $0.378\pm.003$ \\
+MSE  & $0.112\pm.002$ & $\mathbf{0.079\pm.002}$ & $0.111\pm.001$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:phone} shows higher phone correlation for CTC--Viterbi. The
-paired PCC difference is 0.142, with a 95\% speaker-bootstrap interval of
-[0.120, 0.164]. Since the interval lies above zero, the result establishes no
-observed accuracy trade-off and favors the embedded regions under this
-protocol. CTC and MFA boundaries differ by 50.0 ms median; mean disagreement is
-150.7 ms because a minority of alignments have large offsets.
+Table~\ref{tab:phone} shows a stable advantage for Cao's alignment-free
+features. The run-matched PCC gain is $0.232\pm0.019$ over modular MFA and
+$0.226\pm0.009$ over joint GOPT; every seed favors the proposal. This result
+also corrects the conceptual error of using one Viterbi path as the proposed
+phone score: Viterbi is absent from the phone branch.
 
 \begin{table}[t]
 \centering
-\caption{Paired stress results on 1,621 polysyllabic words.}
+\caption{Word-stress accuracy on 2,354 common polysyllabic words.}
 \label{tab:stress}
-\begin{tabular}{lrr}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
-Metric & CTC--Viterbi & MFA \\
+Metric & MFA & Proposed & Joint GOPT \\
 \midrule
-Canonical location accuracy$^\dagger$ & \textbf{74.9\%} & 69.5\% \\
-Correct-stress AUROC & \textbf{0.726} & 0.695 \\
-Grade PCC & \textbf{0.155} & 0.133 \\
-Grade SRCC & \textbf{0.144} & 0.122 \\
+AUROC & 0.662 & 0.681 & $\mathbf{0.707\pm.030}$ \\
+PCC & 0.077 & 0.100 & $\mathbf{0.189\pm.017}$ \\
+Canonical location$^\dagger$ & \textbf{85.85\%} & 85.14\% & n/a \\
 \bottomrule
-\multicolumn{3}{l}{\footnotesize $^\dagger$Among 1,575 words rated correct by humans.}
+\multicolumn{4}{l}{\footnotesize $^\dagger$Among 2,282 words rated stress-correct by experts.}
 \end{tabular}
 \end{table}
 
-For canonical stress location (Table~\ref{tab:stress}), the paired difference
-is 5.4 percentage points and the 95\% speaker-bootstrap interval is [2.8, 8.0]
-points. Correct-stress discrimination also favors CTC descriptively. Because
-only 46 paired polysyllabic words carry the error grade, AUROC and grade
-correlations should be treated as secondary, high-variance estimates.
+The proposed fixed stress branch has 0.019 higher AUROC but 0.70 percentage
+points lower location accuracy than its MFA counterpart. The paired AUROC
+interval is $[-0.008,0.053]$ and the location interval is
+$[-0.018,0.005]$; neither excludes zero. The data therefore show no
+statistically resolved boundary-source difference, not proven equivalence.
+Joint GOPT has the strongest mean scalar stress metrics, though its AUROC varies
+more across initializations and it cannot localize the predicted stress.
 
 \begin{table}[t]
 \centering
-\caption{Mean complete-pipeline latency per paired utterance. MFA alignment is
-the one-job corpus wall time amortized over 2,447 outputs.}
+\caption{Mean complete-pipeline CPU latency (ms/request).}
 \label{tab:latency}
-\begin{tabular}{lrrr}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
-Component & CTC--Viterbi & MFA & MFA/CTC \\
+Component & MFA & Proposed & Joint GOPT \\
 \midrule
-CTC encoding & 62.9 ms & 62.8 ms & --- \\
-Phone regions + LPP & 4.4 ms & 0.2 ms & --- \\
-Stress branch & 31.3 ms & 29.4 ms & --- \\
-External alignment & --- & 36.5 ms & --- \\
-\textbf{Complete pipeline} & \textbf{98.6 ms} & 128.8 ms & \textbf{1.31$\times$} \\
+Shared CTC encoding & 154.85 & 154.85 & 154.85 \\
+Phone vector/head & 1.91 & 8.95 & 1.94 \\
+CTC--Viterbi & --- & 2.98 & --- \\
+Stress scorer & 42.15 & 45.79 & --- \\
+External MFA & 35.71 & --- & 35.71 \\
+\midrule
+\textbf{Complete} & 234.63 & 212.57 & \textbf{192.50} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:latency} shows that the embedded path is 1.31$\times$ faster for
-the complete matched workload. CTC--Viterbi region construction costs more than
-reading and indexing existing MFA intervals, but it replaces the 89.3-s
-external alignment stage. The two encodings are nearly identical in cost, as
-expected, and the same stress workload is executed in both conditions. An
-exploratory four-job MFA run reached 28.0 ms per input for alignment alone;
-because it excludes the shared CTC phone scorer and stress branch, it is not
-used as the end-to-end comparison. The speed claim remains specific to this
-hardware, worker configuration, and corpus.
+The proposal reduces complete latency by 22.06 ms, a 1.10$\times$ speedup over
+modular MFA (Table~\ref{tab:latency}). Cao's 40 alternative CTC losses cost
+more than reading MFA-aligned vector regions, and Viterbi adds 2.98 ms; both
+remain cheaper than external MFA. Joint GOPT is fastest overall (1.22$\times$
+the modular baseline) because its single head replaces the 42--46 ms
+TensorFlow stress branch. It therefore offers the strongest speed and scalar
+stress score here, while the proposal offers substantially higher phone
+correlation and explicit stress location.
+
+\subsection{Official GOPT checkpoint check}
+\label{sec:official}
+
+We ran the unmodified official model, checkpoint, normalization constants, and
+released LibriSpeech test tensors. It obtains phone PCC 0.6183 over 47,369
+phones and word-stress PCC 0.3245 over 15,967 words, closely matching the
+repository values 0.616 and 0.326. This confirms the implementation path used
+to derive our controlled model. Its 0.425 ms GOPT-head latency excludes the
+Kaldi GOP/alignment front end and is not used in Table~\ref{tab:latency}.
 
 \section{Discussion and Limitations}
 
-The result suggests that a CTC model trained to recognize phones can localize
-the evidence most useful to its own posterior score better than cross-system
-MFA intervals. This does not imply that its timestamps are closer to manual
-articulatory boundaries. MFA is the reference pipeline, not ground truth, and
-the median 50-ms disagreement cannot decide which boundary is physically
-correct. The experiment instead asks an application-level question: which
-interval source yields better human-correlated assessments when downstream
-components are held fixed?
+The results support a division of labor. Marginalizing every CTC path is highly
+effective for phone scoring; selecting one canonical path is sufficient to
+localize syllable features without a resolved stress penalty. This is more
+precise than proposing Viterbi as a universally superior alignment or phone
+score. The third system also matters: external alignment does not automatically
+make a complete system slower if a joint head removes a costly downstream
+network.
 
-The paired design removes many confounds but has limitations. MFA OOV failures
-exclude 38 training and 53 test utterances. Global phone-sequence matching
-removes unmatched tokens from both conditions, potentially favoring easier
-examples. The CTC acoustic model was trained for TIMIT-style phone recognition,
-not specifically for L2 assessment. The quadratic calibration may not transfer
-to another learner population. An external-aligner baseline using a native
-phone model matched more closely to the CTC inventory could perform differently.
+Several limitations bound the claim. First, the local stress checkpoint is
+Mallela-inspired rather than their ISLE model, and SpeechOcean supplies only a
+correct/incorrect word grade, not the realized destination of an incorrect
+stress. Second, only 72 common polysyllabic words carry a stress-error label;
+AUROC is consequently uncertain. Third, the alignment-free phone model sees
+1,012 more training phones than MFA-dependent models. That coverage is a real
+system advantage but weakens a feature-only causal interpretation. Fourth, the
+controlled GOPT adaptation uses 78-D CTC vectors rather than its original 84-D
+Kaldi GOP front end, so its SpeechOcean row should not be compared directly
+with official LibriSpeech performance. Fifth, MFA is a baseline interval source,
+not manual boundary ground truth, and Viterbi timestamps should not be read as
+articulatory truth.
 
-The stress experiment validates a boundary substitution in the repository's
-fixed Mallela-inspired scorer; it does not reproduce Mallela et al.'s manually
-corrected ISLE experiment. SpeechOcean supplies only correct/incorrect word
-stress, not the realized wrong stress location. A future study should repeat
-the paired comparison on ISLE with speaker-disjoint German/Italian folds,
-manual syllable boundaries, and explicit wrong-location labels. Finally, a
-parallel MFA deployment and a batched or parallel CTC service could change
-throughput; worker-count scaling should be measured separately rather than
-mixed into the one-job method comparison.
-
-Terminology also deserves care. Some authors use \emph{forced alignment} for
-any transcript-conditioned best path, including Eq.~\ref{eq:viterbi}. Our
-engineering distinction is between an embedded path in the assessment model
-and the external MFA/Kaldi pipeline. Accordingly, the strongest portable terms
-for the proposal are \emph{MFA-free} and \emph{external-aligner-free}.
+Finally, latency depends on hardware, implementation, batching, and
+parallelism. We intentionally compare one request, four common compute threads,
+and one MFA job. A production MFA pool or a batched CTC service would answer a
+different throughput question. Formal stress non-inferiority would also
+require a prespecified margin and a corpus with substantially more stress
+errors.
 
 \section{Conclusion}
 
-We replaced peak timing and the external alignment dependency with one
-canonical-conditioned CTC--Viterbi path shared by phoneme GOP and lexical-stress
-assessment. On paired SpeechOcean762 data, the embedded path improves both
-phone correlation and canonical stress-location accuracy relative to MFA
-regions, with speaker-bootstrap intervals excluding an accuracy loss. It also
-reduces complete one-job phone-and-stress processing time from 128.8 to 98.6 ms
-per paired utterance. The proposed architecture is therefore a faster
-single-model path under the measured protocol, not a universal claim about all
-hardware, worker counts, acoustic models, or corpora.
+We implemented the intended hybrid pipeline: Cao et al.'s alignment-free vector
+features score phones, while a transcript-conditioned CTC--Viterbi path exists
+only to provide regions for a Mallela-inspired stress network. Against a
+complete modular MFA baseline, this design improves phone PCC from
+$0.413\pm0.013$ to $0.645\pm0.009$, shows no statistically resolved stress
+difference, and lowers single-request latency from 234.6 to 212.6 ms. A
+controlled joint-GOPT comparator is faster and stronger on scalar stress but
+substantially weaker on phone correlation and lacks stress location. The
+evidence therefore supports alignment only where the output requires it, with
+the claim restricted to the measured models, corpus, and execution protocol.
 
+\balance
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 

@@ -1,0 +1,34 @@
+{
+  "protocol": {
+    "source": "Gong et al. official repository, checkpoint, and released tensors",
+    "paper": "https://arxiv.org/abs/2205.03432",
+    "repository": "https://github.com/YuanGongND/gopt",
+    "checkpoint": "tmp/reference_gopt/pretrained_models/gopt_librispeech/best_audio_model.pth",
+    "test_data": "tmp/gopt_official_data/seq_data_librispeech",
+    "normalization": "published LibriSpeech constants: mean=3.203, std=4.045",
+    "runtime_scope": "GOPT head only; excludes Kaldi alignment/GOP front end"
+  },
+  "counts": {
+    "utterances": 2500,
+    "phones": 47369,
+    "words": 15967
+  },
+  "accuracy": {
+    "phone": {
+      "pcc": 0.6183311939239502,
+      "srcc": 0.437943829021418,
+      "mse": 0.0834730938076973
+    },
+    "word_stress": {
+      "pcc": 0.32453530490876425,
+      "srcc": 0.1046184770420912,
+      "mse": 0.0070647757069996426
+    }
+  },
+  "head_latency_ms": {
+    "samples": 500,
+    "mean": 0.4253687961609103,
+    "median": 0.42164600745309144,
+    "p95": 0.44871456047985697
+  }
+}

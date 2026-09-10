@@ -1,0 +1,8 @@
+{
+  "protocol": "same Mallela-inspired neural checkpoint/features; interval source only; neural_weight=1.0 (no acoustic-prominence ensemble)",
+  "stress_model": "server/models/sylstress/stress_model.keras",
+  "stress_scaler": "server/models/sylstress/scaler_params.json",
+  "paired_words": 2354,
+  "failures": [],
+  "elapsed_seconds": 218.0737527500023
+}
