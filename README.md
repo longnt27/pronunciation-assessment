@@ -1,104 +1,156 @@
-# Alignment Only Where Needed for Pronunciation Assessment
+<div align="center">
 
-This repository evaluates a hybrid pronunciation-assessment pipeline that
-avoids external forced alignment where it is unnecessary:
+<h1>Alignment Only Where Needed</h1>
+<h3>Alignment-free phoneme scoring + embedded CTC-Viterbi stress assessment</h3>
+
+<p>
+  <a href="output/pdf/alignment_only_where_needed.pdf"><img alt="Paper PDF" src="https://img.shields.io/badge/paper-PDF-b31b1b?style=flat-square"></a>
+  <a href="paper/results/three_system_comparison.json"><img alt="Phone PCC 0.645" src="https://img.shields.io/badge/phone%20PCC-0.645-0072b2?style=flat-square"></a>
+  <a href="paper/results/three_system_latency.json"><img alt="1.10x faster than modular MFA" src="https://img.shields.io/badge/vs.%20modular%20MFA-1.10%C3%97%20faster-009e73?style=flat-square"></a>
+  <a href="tests"><img alt="9 tests passing" src="https://img.shields.io/badge/tests-9%20passing-009e73?style=flat-square"></a>
+</p>
+
+<p><strong>Phone scores do not need boundaries. Stress features do.</strong><br>
+This project aligns only the branch that actually needs temporal regions.</p>
+
+</div>
+
+![Three-system pronunciation-assessment architecture](paper/fig_architecture_three.png)
+
+## The idea
+
+One resident CTC model produces a posterior matrix. The proposed system reuses
+it in two different ways:
 
 ```text
-audio + canonical phones -> Cao et al. CTC posterior matrix
-                           |-> 41-D alignment-free vectors -> phone GOPT
-                           `-> transcript-conditioned CTC-Viterbi intervals
-                               -> 38-D syllable features
-                               -> Mallela-inspired LSTM/attention stress scorer
+audio + canonical phones
+          │
+          ▼
+  CTC posterior matrix
+          ├── Cao 41-D alignment-free vectors ──► phone-only GOPT ──► phone score
+          │
+          └── transcript-conditioned Viterbi ──► syllable features
+                                                   └──► LSTM/attention ──► stress
 ```
 
-The key distinction is deliberate. Phoneme scoring follows Cao et al.'s
-alignment-free vector method; Viterbi is used only to localize syllables for
-stress features. The decoder is conditioned on the known phone transcript, but
-it is embedded in the resident CTC model and does not launch MFA/Kaldi.
+- **Phoneme score:** [Cao et al.'s alignment-free CTC vector](https://doi.org/10.21437/Interspeech.2024-459) + phone-only GOPT.
+- **Syllable stress:** a [Mallela-inspired sequential network](https://doi.org/10.21437/Interspeech.2024-2404) using embedded CTC-Viterbi intervals.
+- **No peak alignment. No request-time MFA/Kaldi job in the proposed system.**
 
-## Three-system experiment
+The Viterbi path is conditioned on the known phone transcript. It is embedded
+localization—not unconstrained phone recognition.
 
-The official speaker-disjoint SpeechOcean762 split is used throughout. Learned
-GOPT heads are trained with five deterministic initializations; numbers below
-are mean ± sample standard deviation. Phone evaluation uses the same 46,119
-held-out phones for all systems. Stress evaluation uses the same 2,354
-polysyllabic words, including 72 expert-rated stress errors.
+## Results at a glance
 
-| Complete system | Phone branch | Stress branch |
-|---|---|---|
-| MFA modular baseline | MFA-aligned 78-D CTC posterior/ratio vector + phone-only GOPT | Mallela-inspired network with MFA intervals |
-| Proposed Cao + Viterbi | Cao 41-D alignment-free vector + phone-only GOPT | Same network with CTC-Viterbi intervals |
-| Gong et al. joint GOPT | MFA-aligned 78-D vector + multi-task GOPT | GOPT word-stress head |
+The experiment uses the official speaker-disjoint SpeechOcean762 split. Phone
+metrics share the same **46,119 held-out phones** across all systems. Stress
+metrics share **2,354 polysyllabic words**, including 72 expert-rated errors.
+Learned GOPT results are mean ± sample standard deviation over five independent
+seeds.
 
-| Held-out metric | MFA modular | Proposed | Joint GOPT |
+| | MFA modular | **Proposed** | Joint GOPT |
 |---|---:|---:|---:|
-| Phone PCC | 0.413 ± 0.013 | **0.645 ± 0.009** | 0.418 ± 0.005 |
-| Phone SRCC | 0.381 ± 0.004 | **0.432 ± 0.003** | 0.378 ± 0.003 |
-| Stress-correctness AUROC | 0.662 | 0.681 | **0.707 ± 0.030** |
-| Stress-grade PCC | 0.077 | 0.100 | **0.189 ± 0.017** |
-| Canonical location accuracy¹ | **85.85%** | 85.14% | not produced |
-| Complete CPU latency | 234.6 ms | 212.6 ms | **192.5 ms** |
+| **Phone PCC ↑** | 0.413 ± 0.013 | **0.645 ± 0.009** | 0.418 ± 0.005 |
+| **Phone SRCC ↑** | 0.381 ± 0.004 | **0.432 ± 0.003** | 0.378 ± 0.003 |
+| **Phone MSE ↓** | 0.112 ± 0.002 | **0.079 ± 0.002** | 0.111 ± 0.001 |
+| **Stress AUROC ↑** | 0.662 | 0.681 | **0.707 ± 0.030** |
+| **Stress PCC ↑** | 0.077 | 0.100 | **0.189 ± 0.017** |
+| **Stress location¹ ↑** | **85.85%** | 85.14% | not produced |
+| **Complete CPU latency ↓** | 234.6 ms | 212.6 ms | **192.5 ms** |
 
-¹ Among 2,282 words rated stress-correct by the experts.
+¹ Canonical-location accuracy among 2,282 words rated stress-correct by the experts.
 
-The proposed phone PCC exceeds the MFA modular baseline by 0.232 ± 0.019 over
-the five matched runs. For the fixed stress network, Viterbi minus MFA is −0.7
-percentage points in location accuracy (95% speaker-bootstrap CI −1.81 to
-+0.48) and +0.019 AUROC (95% CI −0.008 to +0.053). Thus the experiment shows a
-large phone-scoring gain and no statistically resolved stress difference; it
-does not prove strict stress non-inferiority because no margin was preregistered.
+![Phone accuracy, stress accuracy, and complete-pipeline latency](paper/fig_three_systems.png)
 
-Latency is one request at a time on the same ARM64 CPU, with four PyTorch
-intra-op threads for every system and exactly one MFA job. The proposed system
-is 1.10× faster than the complete modular MFA pipeline. Joint GOPT is faster
-still because it omits the separate TensorFlow stress network. This is an
-end-to-end system result, not an alignment-only timing comparison.
+### What the numbers say
 
-The controlled joint-GOPT implementation is an adaptation to the same CTC
-front end. As an implementation check, the unmodified official GOPT checkpoint
-was also run on its released LibriSpeech tensors: phone PCC 0.618 and word
-stress PCC 0.325, matching its published repository values (0.616 and 0.326).
+- The proposed phone PCC improves by **+0.232 ± 0.019** over the modular MFA
+  baseline across matched seeds.
+- The complete proposal is **1.10× faster** than modular MFA: 212.6 versus
+  234.6 ms/request.
+- Viterbi and MFA stress localization are statistically unresolved. The
+  Viterbi-minus-MFA location difference is −0.70 percentage points, with a 95%
+  paired speaker-bootstrap CI of [−1.81, +0.48].
+- Joint GOPT is fastest because one joint head replaces the separate TensorFlow
+  stress network. It has stronger scalar stress results here, but substantially
+  weaker phone correlation and no stress-location output.
 
-The manuscript is in [paper/main.tex](paper/main.tex), the compact audit is in
-[paper/PAPER_SUMMARY.md](paper/PAPER_SUMMARY.md), and machine-readable results
-are in `paper/results/`.
+> **Defensible conclusion:** Cao alignment-free features substantially improve
+> phone scoring, while embedded CTC-Viterbi removes the external aligner from
+> the stress branch without a statistically resolved stress-accuracy change.
 
-## Reproduce the comparison
+This is not a formal non-inferiority result: no stress margin was
+preregistered, and only 72 common polysyllabic words have an error label.
+
+## The three complete systems
+
+| System | Phone branch | Stress branch | External MFA |
+|---|---|---|:---:|
+| **MFA modular** | MFA-aligned 78-D CTC vector → phone GOPT | MFA intervals → fixed sequential scorer | Yes |
+| **Cao + Viterbi (proposed)** | Cao 41-D alignment-free vector → phone GOPT | CTC-Viterbi intervals → same scorer | **No** |
+| **Joint GOPT** | MFA-aligned 78-D vector → multi-task GOPT | GOPT word-stress head | Yes |
+
+The third comparator follows [Gong et al.'s GOPT](https://doi.org/10.1109/ICASSP43922.2022.9746743)
+architecture, adapted to the same CTC front end for a controlled comparison.
+The unchanged official GOPT checkpoint is validated separately on its released
+LibriSpeech tensors:
+
+| Official checkpoint audit | Reproduced | Repository report |
+|---|---:|---:|
+| Phone PCC | 0.618 | 0.616 |
+| Word-stress PCC | 0.325 | 0.326 |
+
+## Explore the research artifacts
+
+| Artifact | What it contains |
+|---|---|
+| [Scientific paper](output/pdf/alignment_only_where_needed.pdf) | Five-page manuscript with method, protocol, results, and limitations |
+| [Result audit](paper/PAPER_SUMMARY.md) | Compact explanation of every reported claim |
+| [Accuracy JSON](paper/results/three_system_comparison.json) | Five-seed metrics, counts, bootstrap intervals, and protocol metadata |
+| [Latency JSON](paper/results/three_system_latency.json) | Equal-resource stage and complete-pipeline timing |
+| [Official GOPT audit](paper/results/gopt_official_validation.json) | Reproduction using the official checkpoint and tensors |
+| [Paired stress rows](paper/results/three_system_stress.words.csv) | Word-level MFA and Viterbi outputs for audit |
+
+## Reproduce the experiment
 
 The Cao and GOPT repositories/checkpoints and SpeechOcean762 are external
-research assets and are intentionally kept under ignored `tmp/` paths.
+research assets. Place them under the ignored `tmp/` paths expected by the
+benchmark, then run:
 
 ```bash
 source venv/bin/activate
 
+# 1. Shared CTC emissions, Cao vectors, Viterbi regions, and MFA vectors
 python benchmarks/compare_three_systems.py features \
   --feature-batch-size 8 --overwrite
 
+# 2. Paired fixed-network stress evaluation
 python benchmarks/compare_three_systems.py stress
 
+# 3. Five independent GOPT training runs
 python benchmarks/compare_three_systems.py train \
   --seeds 5 --epochs 100 --batch-size 25
 
+# 4. Equal-resource complete-pipeline latency
 python benchmarks/compare_three_systems.py latency \
   --device cpu --latency-samples 100
 
+# 5. Official GOPT checkpoint reproduction and manuscript figures
 python benchmarks/compare_three_systems.py validate-gopt
-
 python paper/generate_three_system_figure.py
 ```
 
-Core numerical tests compare CTC losses with exhaustive path enumeration,
-check the 41-D feature ordering, verify repeated-phone Viterbi separation,
-retain diagonal phone substitutions during MFA matching, and validate model
-shapes:
+### Verify the implementation
 
 ```bash
-python -m unittest -v tests.test_three_system_comparison
+python -m unittest discover -s tests -v
 ```
 
-## API
+The tests cover exhaustive CTC path sums, Cao feature ordering, repeated-phone
+Viterbi separation, substitution-preserving MFA mapping, and GOPT tensor
+shapes.
 
-The deployed service still exposes the embedded CTC-Viterbi assessment path:
+## Run the API
 
 ```bash
 python3.11 -m venv venv
@@ -114,23 +166,41 @@ curl -X POST http://127.0.0.1:8000/assess \
   -F "method=ctc_viterbi"
 ```
 
-## Repository layout
+The service exposes the embedded CTC-Viterbi assessment path. The experimental
+Cao alignment-free phone scorer and three-system evaluation live in the
+benchmark code.
+
+## Project map
 
 ```text
-benchmarks/compare_three_systems.py   Feature, stress, training, latency, audit stages
-benchmarks/three_system_models.py     Self-contained GOPT architecture variants
-server/services/gop_service.py        Resident CTC model and Viterbi decoder
-server/services/stress_service.py     Mallela-inspired stress inference
-tests/test_three_system_comparison.py Numerical and architecture tests
-paper/main.tex                        Scientific manuscript
-paper/results/                        Checked-in aggregate results and paired rows
+benchmarks/
+├── compare_three_systems.py    end-to-end experiment and artifact generation
+└── three_system_models.py      self-contained phone-only and joint GOPT models
+
+server/
+├── services/gop_service.py     resident CTC model and Viterbi decoder
+└── services/stress_service.py  sequential syllable-stress inference
+
+paper/
+├── main.tex                    manuscript source
+├── PAPER_SUMMARY.md            result and claim audit
+└── results/                    metrics, paired rows, predictions, checkpoints
+
+tests/
+└── test_three_system_comparison.py
 ```
 
-## Scope
+## Scientific scope
 
-The stress checkpoint is a local Mallela-inspired architectural adaptation,
-not Mallela et al.'s ISLE checkpoint or an exact reproduction of their corpus
-experiment. The joint GOPT row is a controlled CTC-front-end adaptation, while
-the official checkpoint check is reported separately. Speed ratios are
-specific to this hardware, software stack, model, request pattern, and worker
-configuration.
+- The stress checkpoint is a local Mallela-inspired architectural adaptation,
+  not Mallela et al.'s ISLE checkpoint or an exact corpus reproduction.
+- The controlled joint-GOPT row uses 78-D CTC vectors rather than the original
+  84-D Kaldi GOP front end.
+- The alignment-free phone model sees 1,012 more training phones because it
+  does not depend on successful MFA output. This is a real system advantage but
+  also limits a feature-only causal interpretation.
+- Speed ratios are specific to this ARM64 CPU, one-request execution, four
+  shared PyTorch threads, and one MFA job.
+
+For the full methodology and limitations, read the
+**[paper](output/pdf/alignment_only_where_needed.pdf)**.
